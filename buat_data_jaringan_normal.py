@@ -4,57 +4,47 @@ from mininet.link import TCLink
 from mininet.log import setLogLevel
 from mininet.node import OVSKernelSwitch, RemoteController
 from time import sleep
-from datetime import datetime
-from random import randrange, choice
+import random
 
 class MyTopo(Topo):
     def build(self):
-        # Definisi topologi seperti sebelumnya
-        
-        s = []
-
-        # Add switches
-        for i in range(1, 6):
-            switch = self.addSwitch(f's{i}', cls=OVSKernelSwitch, protocols='OpenFlow13')
-            s.append(switch)
-
-        # Add hosts
+        switches = []
         hosts = []
-        for i in range(1, 16):
-            host = self.addHost(f'h{i}', cpu=1.0/20, mac=f"00:00:00:00:00:{i:02}", ip=f"10.0.0.{i}/24")
-            hosts.append(host)
 
-        # Add links
-        for i in range(0, 15):
-            self.addLink(hosts[i], s[i // 3])
+        for s in range(1, 6):
+            switch_name = 's{}'.format(s)
+            switch = self.addSwitch(switch_name, cls=OVSKernelSwitch, protocols='OpenFlow13')
+            switches.append(switch)
 
-        for i in range(0, 4):
-            self.addLink(s[i], s[i + 1])
+            for h in range(1, 4):
+                host_name = 'h{}'.format(s * 3 + h - 3)
+                host_ip = '10.0.0.{}/24'.format(s * 3 + h - 3)
+                host = self.addHost(host_name, cpu=1.0/20, mac="00:00:00:00:00:{:02d}".format(s * 3 + h - 3), ip=host_ip)
+                hosts.append(host)
+                self.addLink(host, switch)
+
+        for i in range(len(switches) - 1):
+            self.addLink(switches[i], switches[i + 1])
 
 def ip_generator():
-    ip = ".".join(["10", "0", "0", str(randrange(1, 16))])
-    return ip
+    return "10.0.0.{}".format(random.randint(1, 15))
 
 def startNetwork():
     topo = MyTopo()
     c0 = RemoteController('c0', ip='192.168.0.101', port=6653)
     net = Mininet(topo=topo, link=TCLink, controller=c0)
     net.start()
-
-    h1 = net.get('h1')
-    hosts = [h1] + [net.get(f'h{i}') for i in range(2, 16)]
+    
+    hosts = net.hosts
+    h1 = hosts[0]
 
     print("--------------------------------------------------------------------------------")
     print("Generating traffic ...")
-
     h1.cmd('cd /home/mininet/webserver')
     h1.cmd('python -m SimpleHTTPServer 80 &')
     h1.cmd('iperf -s -p 5050 &')
     h1.cmd('iperf -s -u -p 5051 &')
     sleep(2)
-
-    for h in hosts:
-        h.cmd('cd /home/mininet/Downloads')
 
     for i in range(600):
         print("--------------------------------------------------------------------------------")
@@ -62,17 +52,17 @@ def startNetwork():
         print("--------------------------------------------------------------------------------")
 
         for j in range(10):
-            src = choice(hosts)
+            src = random.choice(hosts)
             dst = ip_generator()
 
-            print("generating ICMP traffic between %s and h%s and TCP/UDP traffic between %s and h1" % (src, ((dst.split('.'))[3]), src))
+            print("generating ICMP traffic between {} and {} and TCP/UDP traffic between {} and h1".format(src, dst, src))
             src.cmd("ping {} -c 100 &".format(dst))
             src.cmd("iperf -p 5050 -c 10.0.0.1")
             src.cmd("iperf -p 5051 -u -c 10.0.0.1")
 
-            print("%s Downloading index.html from h1" % src)
+            print("{} Downloading index.html from h1".format(src))
             src.cmd("wget http://10.0.0.1/index.html")
-            print("%s Downloading test.zip from h1" % src)
+            print("{} Downloading test.zip from h1".format(src))
             src.cmd("wget http://10.0.0.1/test.zip")
 
         h1.cmd("rm -f *.* /home/mininet/Downloads")
@@ -83,10 +73,7 @@ def startNetwork():
 
 if __name__ == '__main__':
     start = datetime.now()
-
     setLogLevel('info')
     startNetwork()
-
     end = datetime.now()
-
-    print(end - start)
+    print(end-start)
