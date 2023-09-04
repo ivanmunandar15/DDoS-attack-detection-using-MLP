@@ -1,4 +1,4 @@
-import switch
+import topologi
 from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
 from ryu.controller.handler import set_ev_cls
@@ -6,7 +6,7 @@ from ryu.lib import hub
 
 from datetime import datetime
 
-class CollectTrainingStatsApp(switch.SimpleSwitch13):
+class CollectTrainingStatsApp(topologi.SimpleSwitch13):
     def __init__(self, *args, **kwargs):
         super(CollectTrainingStatsApp, self).__init__(*args, **kwargs)
         self.datapaths = {}

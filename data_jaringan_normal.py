@@ -4,10 +4,10 @@ from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 import datetime
-import switch
+import topologi
 
 
-class CollectFlowStatsApp(switch.SimpleSwitch13):
+class CollectFlowStatsApp(topologi.SimpleSwitch13):
     def __init__(self, *args, **kwargs):
         super(CollectFlowStatsApp, self).__init__(*args, **kwargs)
         self.datapaths = {}

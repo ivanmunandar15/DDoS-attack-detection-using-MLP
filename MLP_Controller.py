@@ -3,7 +3,7 @@ from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 
-import switch
+import topologi
 from datetime import datetime
 
 import pandas as pd
@@ -12,7 +12,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import accuracy_score
 
-class SimpleMonitor13(switch.SimpleSwitch13):
+class SimpleMonitor13(topologi.SimpleSwitch13):
 
     def __init__(self, *args, **kwargs):
 
