@@ -6,6 +6,9 @@ from mininet.node import OVSKernelSwitch, RemoteController
 from time import sleep
 import random
 
+from datetime import datetime
+from random import randrange, choice
+
 class MyTopo(Topo):
     def build(self):
         switches = []
