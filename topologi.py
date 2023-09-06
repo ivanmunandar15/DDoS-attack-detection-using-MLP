@@ -27,7 +27,7 @@ class MyTopo(Topo):
 
 def startNetwork():
     topo = MyTopo()
-    c0 = RemoteController('c0', ip='192.168.0.101', port=6653)
+    c0 = RemoteController('c0', ip='127.0.0.1', port=6653)
     net = Mininet(topo=topo, link=TCLink, controller=c0)
     net.start()
     CLI(net)
