@@ -22,7 +22,7 @@ class SimpleMonitor13(topologi_kontroler.SimpleSwitch13):
 
         start = datetime.now()
 
-        self.flow_training()
+        self.flow_predict()
 
         end = datetime.now()
         print("Training time: ", (end-start))
