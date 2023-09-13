@@ -117,7 +117,8 @@ class SimpleMonitor13(topologi_kontroler.SimpleSwitch13):
         
     def load_flow_model(self, model_path):
         try:
-            self.flow_model = joblib.load(model_path)
+            import joblib
+            self.flow_model = joblib.load(model_path, mmap_mode=None, allow_pickle=True, compress=False)
             self.logger.info("Pre-trained model loaded successfully.")
         except Exception as e:
             self.logger.error("Failed to load the pre-trained model: {}".format(e))
