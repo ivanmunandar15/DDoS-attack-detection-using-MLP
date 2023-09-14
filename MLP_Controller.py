@@ -8,7 +8,15 @@ from datetime import datetime
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.optimizers import Adam
+from keras.regularizers import l2
+
+from keras.models import load_model
+
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import accuracy_score
 
@@ -115,19 +123,22 @@ class SimpleMonitor13(topologi_kontroler.SimpleSwitch13):
             
         file0.close()
         
-    def load_flow_model(self, model_path):
-        try:
-            import joblib
-            self.flow_model = joblib.load(model_path, mmap_mode=None, allow_pickle=True, compress=False)
-            self.logger.info("Pre-trained model loaded successfully.")
-        except Exception as e:
-            self.logger.error("Failed to load the pre-trained model: {}".format(e))
+    def load_flow_model(self):
+            try:
+                # Memuat model yang telah disimpan
+                self.flow_model = load_model('flow_model.h5')
+            except Exception as e:
+                self.logger.error("Error loading flow model: {}".format(str(e)))
+
+
+    def preprocess_data(self, X):
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+        return X_scaled
 
 
     def flow_predict(self):
         try:
-            model_path = "model.sav"  # Replace this with the path to your pre-trained model
-            self.load_flow_model(model_path)
 
             predict_flow_dataset = pd.read_csv('PredictFlowStatsfile.csv')
 
@@ -138,7 +149,11 @@ class SimpleMonitor13(topologi_kontroler.SimpleSwitch13):
             X_predict_flow = predict_flow_dataset.iloc[:, :].values
             X_predict_flow = X_predict_flow.astype('float64')
             
+            # Preprocess data menggunakan fungsi preprocess_data
+            X_predict_flow = self.preprocess_data(X_predict_flow)
+
             y_flow_pred = self.flow_model.predict(X_predict_flow)
+            y_flow_pred = (y_flow_pred > 0.5).astype(int)
 
             legitimate_trafic = 0
             ddos_trafic = 0
