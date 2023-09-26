@@ -6,12 +6,16 @@ from ryu.lib import hub
 import topologi_kontroler
 from datetime import datetime
 
+import os
+import joblib
+
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 
+from sklearn.neural_network import MLPClassifier
 from keras.models import Sequential
-from keras.layers import Dense
+from keras.layers import Dense, Dropout
 from keras.optimizers import Adam
 from keras.regularizers import l2
 
@@ -23,20 +27,21 @@ from sklearn.metrics import accuracy_score
 class SimpleMonitor13(topologi_kontroler.SimpleSwitch13):
 
     def __init__(self, *args, **kwargs):
-
         super(SimpleMonitor13, self).__init__(*args, **kwargs)
         self.datapaths = {}
         self.monitor_thread = hub.spawn(self._monitor)
 
         start = datetime.now()
 
-        self.flow_predict()
+        self.flow_training()  # Panggil metode flow_training untuk melatih model
 
         end = datetime.now()
-        print("Training time: ", (end-start))
+        print("Waktu Pelatihan: ", (end-start))
+
 
     @set_ev_cls(ofp_event.EventOFPStateChange,
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])
+
     def _state_change_handler(self, ev):
         datapath = ev.datapath
         if ev.state == MAIN_DISPATCHER:
@@ -122,24 +127,62 @@ class SimpleMonitor13(topologi_kontroler.SimpleSwitch13):
                         byte_count_per_second,byte_count_per_nsecond))
             
         file0.close()
-        
-    def load_flow_model(self):
-            try:
-                # Memuat model yang telah disimpan
-                self.flow_model = load_model('flow_model.h5')
-            except Exception as e:
-                self.logger.error("Error loading flow model: {}".format(str(e)))
 
+    def flow_training(self):
+        self.logger.info("Pelatihan Model ...")
 
-    def preprocess_data(self, X):
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
-        return X_scaled
+        # Periksa apakah file model ada, dan jika ada, muat modelnya
+        if os.path.isfile('mlp_model.pkl'):
+            self.flow_model = joblib.load('mlp_model.pkl')  # Gunakan load_model dari keras.models
+        else:
+            flow_dataset = pd.read_csv('FlowStatsfile.csv')
+            flow_dataset.iloc[:, 2] = flow_dataset.iloc[:, 2].str.replace('.', '')
+            flow_dataset.iloc[:, 3] = flow_dataset.iloc[:, 3].str.replace('.', '')
+            flow_dataset.iloc[:, 5] = flow_dataset.iloc[:, 5].str.replace('.', '')
+
+            X_flow = flow_dataset.iloc[:, :-1].values
+            X_flow = X_flow.astype('float64')
+
+            y_flow = flow_dataset.iloc[:, -1].values
+
+            X_flow_train, X_flow_test, y_flow_train, y_flow_test = train_test_split(X_flow, y_flow, test_size=0.25, random_state=0)
+
+            classifier = MLPClassifier(
+                hidden_layer_sizes=(256, 128),  # Ubah ukuran lapisan tersembunyi
+                activation='relu', 
+                alpha=0.001,  # Menambahkan regularisasi L2
+                random_state=42, 
+                solver='adam', 
+                learning_rate_init=0.001, 
+                verbose=1, 
+                early_stopping=True,  # Menggunakan early stopping
+                validation_fraction=0.1  # Porsi data validasi
+            )
+
+            # Train the custom model
+            self.flow_model = classifier.fit(X_flow_train, y_flow_train)
+
+            joblib.dump(self.flow_model, 'mlp_model.pkl')
+
+            y_flow_pred = self.flow_model.predict(X_flow_test)
+
+            self.logger.info("------------------------------------------------------------------------------")
+
+            self.logger.info("confusion matrix")
+            cm = confusion_matrix(y_flow_test, y_flow_pred)
+            self.logger.info(cm)
+
+            acc = accuracy_score(y_flow_test, y_flow_pred)
+
+            self.logger.info("succes accuracy = {0:.2f} %".format(acc*100))
+            fail = 1.0 - acc
+            self.logger.info("fail accuracy = {0:.2f} %".format(fail*100))
+            self.logger.info("------------------------------------------------------------------------------")
+
 
 
     def flow_predict(self):
         try:
-
             predict_flow_dataset = pd.read_csv('PredictFlowStatsfile.csv')
 
             predict_flow_dataset.iloc[:, 2] = predict_flow_dataset.iloc[:, 2].str.replace('.', '')
@@ -149,37 +192,34 @@ class SimpleMonitor13(topologi_kontroler.SimpleSwitch13):
             X_predict_flow = predict_flow_dataset.iloc[:, :].values
             X_predict_flow = X_predict_flow.astype('float64')
             
-            # Preprocess data menggunakan fungsi preprocess_data
-            X_predict_flow = self.preprocess_data(X_predict_flow)
-
             y_flow_pred = self.flow_model.predict(X_predict_flow)
-            y_flow_pred = (y_flow_pred > 0.5).astype(int)
 
             legitimate_trafic = 0
             ddos_trafic = 0
-            victim = -1  # Initialize victim
 
-            for i, prediction in enumerate(y_flow_pred):
-                if prediction == 0:
-                    legitimate_trafic += 1
+            for i in y_flow_pred:
+                if i == 0:
+                    legitimate_trafic = legitimate_trafic + 1
                 else:
-                    ddos_trafic += 1
-                    victim = int(predict_flow_dataset.iloc[i, 5]) % 20
+                    ddos_trafic = ddos_trafic + 1
+                    victim = int(predict_flow_dataset.iloc[i, 5])%20
+                    
+                    
+                    
 
             self.logger.info("------------------------------------------------------------------------------")
-            if (legitimate_trafic / len(y_flow_pred) * 100) > 80:
-                self.logger.info("legitimate traffic ...")
+            if (legitimate_trafic/len(y_flow_pred)*100) > 80:
+                self.logger.info("legitimate trafic ...")
             else:
-                self.logger.info("ddos traffic ...")
-                if victim != -1:
-                    self.logger.info("victim is host: h{}".format(victim))
+                self.logger.info("ddos trafic ...")
+                self.logger.info("victim is host: h{}".format(victim))
 
             self.logger.info("------------------------------------------------------------------------------")
             
-            # Clear the contents of the prediction file
-            file0 = open("PredictFlowStatsfile.csv", "w")
+            file0 = open("PredictFlowStatsfile.csv","w")
+            
             file0.write('timestamp,datapath_id,flow_id,ip_src,tp_src,ip_dst,tp_dst,ip_proto,icmp_code,icmp_type,flow_duration_sec,flow_duration_nsec,idle_timeout,hard_timeout,flags,packet_count,byte_count,packet_count_per_second,packet_count_per_nsecond,byte_count_per_second,byte_count_per_nsecond\n')
             file0.close()
 
-        except Exception as e:
-            self.logger.error("An error occurred during prediction: {}".format(e))
+        except:
+            pass
