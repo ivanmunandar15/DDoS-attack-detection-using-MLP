@@ -28,17 +28,17 @@ class MyTopo(Topo):
             self.addLink(switches[i], switches[i + 1])
 
 def ip_generator():
-    ip = ".".join(["10", "0", "0", str(randrange(1, 16))])
+    ip = ".".join(["10", "0", "0", str(randrange(1, 15))])
     return ip
 
 def startNetwork():
     topo = MyTopo()
-    c0 = RemoteController('c0', ip='192.168.0.101', port=6653)
+    c0 = RemoteController('c0', ip='127.0.0.1')
     net = Mininet(topo=topo, link=TCLink, controller=c0)
     net.start()
 
     h1 = net.get('h1')
-    hosts = [h1] + [net.get(f'h{i}') for i in range(2, 16)]
+    hosts = [h1] + [net.get(f'h{i}') for i in range(2, 15)]
 
     h1.cmd('cd /home/mininet/webserver')
     h1.cmd('python -m SimpleHTTPServer 80 &')
