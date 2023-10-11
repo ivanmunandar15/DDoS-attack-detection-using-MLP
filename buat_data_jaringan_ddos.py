@@ -57,22 +57,23 @@ def startNetwork():
     print("Performing UDP Flood")  
     print("--------------------------------------------------------------------------------")   
     src.cmd("timeout 20s hping3 -2 -V -d 120 -w 64 --rand-source --flood {}".format(dst))    
-    sleep(100)
+    sleep(100)  
     
     src = choice(hosts)
     dst = ip_generator()    
     print("--------------------------------------------------------------------------------")
     print("Performing TCP-SYN Flood")  
     print("--------------------------------------------------------------------------------")
-    src.cmd('timeout 20s hping3 -S -V -d 120 -w 64 -p 80 --rand-source --flood 10.0.0.1')
+    src.cmd("timeout 20s hping3 -S -V -d 120 -w 64 -p 80 --rand-source --flood {}".format(dst))
+
     sleep(100)
     
     src = choice(hosts)
     dst = ip_generator()   
     print("--------------------------------------------------------------------------------")
-    print("Performing LAND Attack")  
+    print("Performing DNS Amplification")  
     print("--------------------------------------------------------------------------------")   
-    src.cmd("timeout 20s hping3 -1 -V -d 120 -w 64 --flood -a {} {}".format(dst,dst))
+    src.cmd("timeout 20s hping3 --rand-source -p 53 --flood --data 100 {}".format(dst,dst))
     sleep(100)  
     print("--------------------------------------------------------------------------------")
 
