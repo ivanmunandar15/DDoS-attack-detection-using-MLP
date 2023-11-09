@@ -48,8 +48,7 @@ def startNetwork():
     print("--------------------------------------------------------------------------------")
     print("Performing UDP Flood")  
     print("--------------------------------------------------------------------------------")   
-    src.cmd("timeout 20s hping3 -2 -V -d 120 -w 64 --rand-source --flood {}".format(dst))    
-    sleep(100)  
+    src.cmd("timeout 300s hping3 -2 -V -d 120 -w 64 --rand-source --flood 10.0.0.1")    
     
     # CLI(net)
     net.stop()
