@@ -4,7 +4,7 @@ from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 import os
-import datetime
+from datetime import datetime
 
 
 class CollectFlowStatsApp(topologi_kontroler.SimpleSwitch13):
