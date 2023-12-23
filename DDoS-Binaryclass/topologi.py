@@ -4,6 +4,8 @@ from mininet.link import TCLink
 from mininet.log import setLogLevel
 from mininet.cli import CLI
 from mininet.node import OVSKernelSwitch, RemoteController
+# Impor fungsi wrapper dari sflow.py
+from sflow import wrapper 
 
 class MyTopo(Topo):
     def build(self):
@@ -27,8 +29,12 @@ class MyTopo(Topo):
 
 def startNetwork():
     topo = MyTopo()
-    c0 = RemoteController('c0', ip='127.0.0.1')
+    c0 = RemoteController('c0', ip='127.0.0.1', port=6653)
     net = Mininet(topo=topo, link=TCLink, controller=c0)
+
+    # Menggunakan fungsi wrapper dari sflow.py
+    wrapper(net)
+
     net.start()
     CLI(net)
     net.stop()

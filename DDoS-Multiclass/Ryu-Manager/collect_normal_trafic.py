@@ -1,120 +1,100 @@
-import topologi_kontroler
-from ryu.controller import ofp_event
-from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
-from ryu.controller.handler import set_ev_cls
-from ryu.lib import hub
 import os
 from datetime import datetime
+import topologi_kontroler
+from ryu.controller import ofp_event
+from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
+from ryu.controller.handler import set_ev_cls
+from ryu.lib import hub
 
-# class CollectTrainingStatsApp(simple_switch_13.SimpleSwitch13):
-class CollectTrainingStatsApp(topologi_kontroler.SimpleSwitch13):
+class CollectFlowStatsApp(topologi_kontroler.SimpleSwitch13):
     def __init__(self, *args, **kwargs):
-        super(CollectTrainingStatsApp, self).__init__(*args, **kwargs)
+        super(CollectFlowStatsApp, self).__init__(*args, **kwargs)
         self.datapaths = {}
         self.monitor_thread = hub.spawn(self.monitor)
 
-    #Asynchronous message
-    @set_ev_cls(ofp_event.EventOFPStateChange,[MAIN_DISPATCHER, DEAD_DISPATCHER])
+    @set_ev_cls(ofp_event.EventOFPStateChange, [CONFIG_DISPATCHER, MAIN_DISPATCHER])
     def state_change_handler(self, ev):
         datapath = ev.datapath
         if ev.state == MAIN_DISPATCHER:
             if datapath.id not in self.datapaths:
-                self.logger.debug('register datapath: %016x', datapath.id)
                 self.datapaths[datapath.id] = datapath
-
-        elif ev.state == DEAD_DISPATCHER:
+                self.logger.debug('Registered datapath: %016x', datapath.id)
+        elif ev.state == CONFIG_DISPATCHER:
             if datapath.id in self.datapaths:
-                self.logger.debug('unregister datapath: %016x', datapath.id)
                 del self.datapaths[datapath.id]
-
+                self.logger.debug('Unregistered datapath: %016x', datapath.id)
 
     def monitor(self):
         while True:
-            for dp in self.datapaths.values():
-                self.request_stats(dp)
+            for datapath in self.datapaths.values():
+                self.request_stats(datapath)
             hub.sleep(10)
 
-
     def request_stats(self, datapath):
-        self.logger.debug('send stats request: %016x', datapath.id)
-        
+        self.logger.debug('Sending stats request to datapath: %016x', datapath.id)
         parser = datapath.ofproto_parser
-
         req = parser.OFPFlowStatsRequest(datapath)
         datapath.send_msg(req)
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
-    def _flow_stats_reply_handler(self, ev):
-
-        timestamp = datetime.now()
-        timestamp = timestamp.timestamp()
-        icmp_code = -1
-        icmp_type = -1
-        tp_src = 0
-        tp_dst = 0
-
-        # Memastikan folder dataset ada, jika tidak, buat folder tersebut
+    def handle_flow_stats_reply(self, event):
+        body = event.msg.body
+        timestamp = datetime.now().timestamp()
         dataset_folder = 'dataset'
         os.makedirs(dataset_folder, exist_ok=True)
-
-        # Path file CSV di dalam folder dataset untuk menyimpan statistik aliran
         file_path = os.path.join(dataset_folder, "FlowStatsfile.csv")
 
-        header = 'timestamp,datapath_id,flow_id,ip_src,tp_src,ip_dst,tp_dst,ip_proto,icmp_code,icmp_type,flow_duration_sec,flow_duration_nsec,idle_timeout,hard_timeout,flags,packet_count,byte_count,packet_count_per_second,packet_count_per_nsecond,byte_count_per_second,byte_count_per_nsecond,label\n'
-        
-
-        # Membuka atau membuat file CSV di dalam folder dataset untuk menyimpan statistik aliran
         with open(file_path, "a+") as file:
-            # Menyertakan header jika file kosong
             if os.path.getsize(file_path) == 0:
+                header = "Timestamp,DatapathID,FlowID,IPSource,PortSource,IPDestination,PortDestination,IPProtocol," \
+                         "ICMPCode,ICMPType,DurationSecond,DurationNSecond,IdleTimeout,HardTimeout,Flags," \
+                         "PacketCount,ByteCount,PacketCountPerSecond,PacketCountPerNSecond,ByteCountPerSecond," \
+                         "ByteCountPerNSecond,Label\n"
                 file.write(header)
 
-            # Ekstrak statistik aliran dari pesan acara
-            body = event.msg.body
+            for stat in sorted([flow for flow in body if flow.priority == 1], key=lambda flow: (
+                    flow.match['eth_type'], flow.match.get('ipv4_src', ''), flow.match.get('ipv4_dst', ''), flow.match.get('ip_proto', 0))):
+                flow_details = self.parse_flow_stat(stat)
+                file.write("{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n".format(
+                    timestamp, event.msg.datapath.id, *flow_details))
 
-            for stat in sorted([flow for flow in body if (flow.priority == 1) ], key=lambda flow:
-                (flow.match['eth_type'],flow.match['ipv4_src'],flow.match['ipv4_dst'],flow.match['ip_proto'])):
-            
+    def parse_flow_stat(self, stat):
+        ip_src = stat.match.get('ipv4_src', '0.0.0.0')
+        ip_dst = stat.match.get('ipv4_dst', '0.0.0.0')
+        ip_proto = stat.match.get('ip_proto', 0)
 
-                ip_src = stat.match['ipv4_src']
-                ip_dst = stat.match['ipv4_dst']
-                ip_proto = stat.match['ip_proto']
-                
-                if stat.match['ip_proto'] == 1:
-                    icmp_code = stat.match['icmpv4_code']
-                    icmp_type = stat.match['icmpv4_type']
+        icmp_code, icmp_type, tp_src, tp_dst = -1, -1, 0, 0
+        if ip_proto == 1:
+            icmp_code = stat.match.get('icmpv4_code', 0)
+            icmp_type = stat.match.get('icmpv4_type', 0)
+        elif ip_proto == 6:
+            tp_src = stat.match.get('tcp_src', 0)
+            tp_dst = stat.match.get('tcp_dst', 0)
+        elif ip_proto == 17:
+            tp_src = stat.match.get('udp_src', 0)
+            tp_dst = stat.match.get('udp_dst', 0)
 
-                elif stat.match['ip_proto'] == 6:
-                    tp_src = stat.match['tcp_src']
-                    tp_dst = stat.match['tcp_dst']
+        flow_id = f"{ip_src}:{tp_src}->{ip_dst}:{tp_dst}:{ip_proto}"
 
-                elif stat.match['ip_proto'] == 17:
-                    tp_src = stat.match['udp_src']
-                    tp_dst = stat.match['udp_dst']
+        packet_count_per_second, packet_count_per_nsecond, byte_count_per_second, byte_count_per_nsecond = self.calculate_rates(stat)
 
-                flow_id = str(ip_src) + str(tp_src) + str(ip_dst) + str(tp_dst) + str(ip_proto)
-                
-                try:
-                    packet_count_per_second = stat.packet_count/stat.duration_sec
-                    packet_count_per_nsecond = stat.packet_count/stat.duration_nsec
-                except:
-                    packet_count_per_second = 0
-                    packet_count_per_nsecond = 0
-                    
-                try:
-                    byte_count_per_second = stat.byte_count/stat.duration_sec
-                    byte_count_per_nsecond = stat.byte_count/stat.duration_nsec
-                except:
-                    byte_count_per_second = 0
-                    byte_count_per_nsecond = 0
-                    
+        return ip_src, tp_src, ip_dst, tp_dst, ip_proto, icmp_code, icmp_type, \
+               stat.duration_sec, stat.duration_nsec, stat.idle_timeout, stat.hard_timeout, stat.flags, \
+               stat.packet_count, stat.byte_count, packet_count_per_second, packet_count_per_nsecond, \
+               byte_count_per_second, byte_count_per_nsecond, 0
 
-                file0.write("{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n"
-                    .format(timestamp, ev.msg.datapath.id, flow_id, ip_src, tp_src,ip_dst, tp_dst,
-                            stat.match['ip_proto'],icmp_code,icmp_type,
-                            stat.duration_sec, stat.duration_nsec,
-                            stat.idle_timeout, stat.hard_timeout,
-                            stat.flags, stat.packet_count,stat.byte_count,
-                            packet_count_per_second,packet_count_per_nsecond,
-                            byte_count_per_second,byte_count_per_nsecond,0))
-            file0.close()
+    def calculate_rates(self, stat):
+        try:
+            packet_count_per_second = stat.packet_count / stat.duration_sec if stat.duration_sec else 0
+            packet_count_per_nsecond = stat.packet_count / stat.duration_nsec if stat.duration_nsec else 0
+            byte_count_per_second = stat.byte_count / stat.duration_sec if stat.duration_sec else 0
+            byte_count_per_nsecond = stat.byte_count / stat.duration_nsec if stat.duration_nsec else 0
+        except ZeroDivisionError:
+            packet_count_per_second = packet_count_per_nsecond = byte_count_per_second = byte_count_per_nsecond = 0
+
+        return packet_count_per_second, packet_count_per_nsecond, byte_count_per_second, byte_count_per_nsecond
+
+if __name__ == "__main__":
+    from ryu.cmd import manager
+    manager.main()
+

@@ -4,8 +4,6 @@ from mininet.link import TCLink
 from mininet.log import setLogLevel
 from mininet.node import OVSKernelSwitch, RemoteController
 from time import sleep
-import random
-
 from datetime import datetime
 from random import randrange, choice
 
@@ -30,48 +28,34 @@ class MyTopo(Topo):
             self.addLink(switches[i], switches[i + 1])
 
 def ip_generator():
-    return "10.0.0.{}".format(random.randint(1, 15))
+    return "10.0.0.{}".format(randrange(1, 16))
 
 def startNetwork():
     topo = MyTopo()
     c0 = RemoteController('c0', ip='127.0.0.1')
     net = Mininet(topo=topo, link=TCLink, controller=c0)
     net.start()
-    
-    hosts = net.hosts
-    h1 = hosts[0]
 
-    print("--------------------------------------------------------------------------------")
-    print("Generating traffic ...")
+    h1 = net.get('h1')
+    hosts = [net.get(f'h{i}') for i in range(1, 16)]
+
     h1.cmd('cd /home/mininet/webserver')
-    h1.cmd('python -m SimpleHTTPServer 80 &')
-    h1.cmd('iperf -s -p 5050 &')
-    h1.cmd('iperf -s -u -p 5051 &')
-    sleep(2)
-
-    for i in range(600):
+    h1.cmd('python3 -m http.server 80 &')
+    
+    for attack_type in ['ICMP (Ping) Flood', 'UDP Flood', 'TCP-SYN Flood', 'DNS Amplification']:
+        src = choice(hosts)
+        dst = ip_generator()
         print("--------------------------------------------------------------------------------")
-        print("Iteration n {} ...".format(i+1))
+        print(f"Performing {attack_type}")
         print("--------------------------------------------------------------------------------")
-
-        for j in range(10):
-            src = random.choice(hosts)
-            dst = ip_generator()
-
-            print("generating ICMP traffic between {} and {} and TCP/UDP traffic between {} and h1".format(src, dst, src))
-            src.cmd("ping {} -c 100 &".format(dst))
-            src.cmd("iperf -p 5050 -c 10.0.0.1")
-            src.cmd("iperf -p 5051 -u -c 10.0.0.1")
-
-            print("{} Downloading index.html from h1".format(src))
-            src.cmd("wget http://10.0.0.1/index.html")
-            print("{} Downloading test.zip from h1".format(src))
-            src.cmd("wget http://10.0.0.1/test.zip")
-
-        h1.cmd("rm -f *.* /home/mininet/Downloads")
+        if attack_type == 'DNS Amplification':
+            src.cmd(f"timeout 20s hping3 --rand-source -p 53 --flood --data 100 {dst}")
+        else:
+            protocol_flag = '-1' if attack_type == 'ICMP (Ping) Flood' else '-2' if attack_type == 'UDP Flood' else '-S' if attack_type == 'TCP-SYN Flood' else ''
+            src.cmd(f"timeout 20s hping3 {protocol_flag} -V -d 120 -w 64 -p 80 --rand-source --flood {dst}")
+        sleep(100)
 
     print("--------------------------------------------------------------------------------")
-
     net.stop()
 
 if __name__ == '__main__':
@@ -79,4 +63,4 @@ if __name__ == '__main__':
     setLogLevel('info')
     startNetwork()
     end = datetime.now()
-    print(end-start)
+    print(f"Total time: {end - start}")

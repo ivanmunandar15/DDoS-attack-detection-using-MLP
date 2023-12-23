@@ -81,4 +81,3 @@ if __name__ == '__main__':
     startNetwork()
     end = datetime.now()
     print(f"Total time: {end - start}")
-
